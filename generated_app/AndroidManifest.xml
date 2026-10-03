@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.aiapp.generated">
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -28,6 +29,9 @@
             </intent-filter>
         </activity>
 
-        <service android:name=".FlashlightService" android:exported="false" />
+        <service 
+            android:name=".FlashlightService" 
+            android:exported="false"
+            android:foregroundServiceType="camera" />
     </application>
 </manifest>

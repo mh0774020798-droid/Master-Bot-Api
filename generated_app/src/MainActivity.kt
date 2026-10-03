@@ -12,10 +12,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.RectF
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
 import android.hardware.Sensor
@@ -31,16 +28,11 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.Vibrator
-import android.text.InputType
 import android.util.TypedValue
 import android.view.Gravity
-import android.view.KeyEvent
-import android.view.View
 import android.view.ViewGroup
-import android.view.Window
 import android.view.WindowManager
 import android.widget.Button
-import android.widget.CompoundButton
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -53,6 +45,7 @@ class MainActivity : Activity() {
 
     private lateinit var prefs: SharedPreferences
     private var statusReceiver: BroadcastReceiver? = null
+    private var batteryReceiver: BroadcastReceiver? = null
     private lateinit var mainButton: FrameLayout
     private lateinit var mainButtonText: TextView
     private lateinit var mainButtonSub: TextView
@@ -216,9 +209,9 @@ class MainActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(40))
             weightSum = 3f
         }
-        sensitivityLow = createSensitivityButton("נמוכה", 0, 3)
-        sensitivityMed = createSensitivityButton("בינונית", 1, 3)
-        sensitivityHigh = createSensitivityButton("גבוהה", 2, 3)
+        sensitivityLow = createSensitivityButton("נמוכה", 0)
+        sensitivityMed = createSensitivityButton("בינונית", 1)
+        sensitivityHigh = createSensitivityButton("גבוהה", 2)
         
         sensitivityLayout.addView(sensitivityLow)
         sensitivityLayout.addView(sensitivityMed)
@@ -386,6 +379,8 @@ class MainActivity : Activity() {
         super.onStop()
         statusReceiver?.let { unregisterReceiver(it) }
         statusReceiver = null
+        batteryReceiver?.let { unregisterReceiver(it) }
+        batteryReceiver = null
     }
 
     private fun dpToPx(dp: Int): Int {
@@ -419,7 +414,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun createSensitivityButton(title: String, index: Int, total: Int): TextView {
+    private fun createSensitivityButton(title: String, index: Int): TextView {
         return TextView(this).apply {
             text = title
             gravity = Gravity.CENTER
@@ -450,7 +445,8 @@ class MainActivity : Activity() {
                 buttons[i].background = activeBg
                 buttons[i].setTextColor(Color.WHITE)
                 buttons[i].typeface = android.graphics.Typeface.DEFAULT_BOLD
-            } else {
+            }
+            else {
                 buttons[i].background = inactiveBg
                 buttons[i].setTextColor(0xFF64748B.toInt())
                 buttons[i].typeface = android.graphics.Typeface.DEFAULT
@@ -526,13 +522,17 @@ class MainActivity : Activity() {
                     val isOn = intent.getBooleanExtra("status", false)
                     updateUIState(isOn)
                 }
-            }
+            } 
         }
-        registerReceiver(statusReceiver, IntentFilter(FlashlightService.ACTION_STATUS_CHANGED))
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(statusReceiver, IntentFilter(FlashlightService.ACTION_STATUS_CHANGED), 2) // 2 is RECEIVER_NOT_EXPORTED
+        } else {
+            registerReceiver(statusReceiver, IntentFilter(FlashlightService.ACTION_STATUS_CHANGED))
+        }
     }
 
     private fun registerBatteryReceiver() {
-        val batteryReceiver = object : BroadcastReceiver() {
+        batteryReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
                 val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
@@ -542,7 +542,11 @@ class MainActivity : Activity() {
                 }
             }
         }
-        registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED), 1) // 1 is RECEIVER_EXPORTED
+        } else {
+            registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        }
     }
 
     private fun openScreenLightDialog() {
@@ -623,7 +627,11 @@ class FlashlightService : Service(), SensorEventListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(1, createNotification())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(1, createNotification(), android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)
+        } else {
+            startForeground(1, createNotification())
+        }
 
         when (intent?.action) {
             ACTION_TOGGLE -> {
@@ -644,7 +652,7 @@ class FlashlightService : Service(), SensorEventListener {
             }
         }
         return START_STICKY
-    } 
+    }
 
     private fun toggleTorch() {
         if (isSosOn) {
@@ -673,7 +681,7 @@ class FlashlightService : Service(), SensorEventListener {
                 setTorchState(!isTorchOn)
                 val interval = prefs.getInt("sos_interval", 500).toLong()
                 handler.postDelayed(this, interval)
-            }
+            } 
         }
         handler.post(strobeRunnable!!)
     }
@@ -704,17 +712,17 @@ class FlashlightService : Service(), SensorEventListener {
             val gZ = z / SensorManager.GRAVITY_EARTH
             val gForce = Math.sqrt((gX * gX + gY * gY + gZ * gZ).toDouble()).toFloat()
 
-            // Sensitivity levels: Low (15), Medium (12), High (9)
+            // Sensitivity levels: Low (2.2), Medium (1.8), High (1.4)
             val sensitivitySetting = prefs.getInt("shake_sensitivity", 1)
             val threshold = when (sensitivitySetting) {
-                0 -> 2.2f // Low sensitivity (requires harder shake)
-                2 -> 1.4f // High sensitivity
-                else -> 1.8f // Medium
+                0 -> 2.2f
+                2 -> 1.4f
+                else -> 1.8f
             }
 
             if (gForce > threshold) {
                 val now = System.currentTimeMillis()
-                if (now - lastShakeTime > 1200) { // Debounce
+                if (now - lastShakeTime > 1200) {
                     lastShakeTime = now
                     triggerVibration()
                     toggleTorch()
