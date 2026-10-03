@@ -187,7 +187,7 @@ class MainActivity : Activity() {
             setOnCheckedChangeListener { _, isChecked ->
                 prefs.edit().putBoolean("shake_enabled", isChecked).apply()
                 updateServiceSettings()
-            } 
+            }
         }
         shakeCard.addView(shakeSwitch)
 
@@ -482,7 +482,7 @@ class MainActivity : Activity() {
     private fun startFlashlightService(intent: Intent) {
         if (Build.VERSION.SDK_INT >= 26) {
             try {
-                Context::class.java.getMethod("startForegroundService", Intent::class.java).invoke(this, intent)
+                startForegroundService(intent)
             } catch (e: Exception) {
                 startService(intent)
             }
@@ -540,8 +540,8 @@ class MainActivity : Activity() {
                 if (intent?.action == FlashlightService.ACTION_STATUS_CHANGED) {
                     val isOn = intent.getBooleanExtra("status", false)
                     updateUIState(isOn)
-                } 
-            } 
+                }
+            }
         }
         safeRegisterReceiver(statusReceiver!!, IntentFilter(FlashlightService.ACTION_STATUS_CHANGED), false)
     }
@@ -551,11 +551,11 @@ class MainActivity : Activity() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
                 val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
-                if (level != -1 && scale != -1) {
+                if (level != -1 && scale > 0) {
                     val pct = (level * 100 / scale.toFloat()).toInt()
                     batteryText.text = "סוללה: $pct%"
-                } 
-            } 
+                }
+            }
         }
         registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
     }
@@ -761,20 +761,9 @@ class FlashlightService : Service(), SensorEventListener {
         val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         if (Build.VERSION.SDK_INT >= 26) {
             try {
-                val effectClass = Class.forName("android.os.VibrationEffect")
-                val createOneShotMethod = effectClass.getMethod(
-                    "createOneShot",
-                    java.lang.Long.TYPE,
-                    java.lang.Integer.TYPE
-                )
-                val effect = createOneShotMethod.invoke(null, 150L, -1) // -1 is DEFAULT_AMPLITUDE
-                val vibrateMethod = Vibrator::class.java.getMethod(
-                    "vibrate",
-                    effectClass
-                )
-                vibrateMethod.invoke(vibrator, effect)
+                vibrator.vibrate(android.os.VibrationEffect.createOneShot(150, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
                 return
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 // Fallback
             }
         }
@@ -793,23 +782,11 @@ class FlashlightService : Service(), SensorEventListener {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= 26) {
             try {
-                val channelClass = Class.forName("android.app.NotificationChannel")
-                val constructor = channelClass.getConstructor(
-                    String::class.java,
-                    CharSequence::class.java,
-                    java.lang.Integer.TYPE
-                )
-                val channel = constructor.newInstance(CHANNEL_ID, "שירות פנס רקע", 2) // 2 is IMPORTANCE_LOW
-                
-                val setDescriptionMethod = channelClass.getMethod("setDescription", String::class.java)
-                setDescriptionMethod.invoke(channel, "מאפשר זיהוי ניעור להפעלת הפנס כשהמסך כבוי")
-                
                 val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                val createChannelMethod = NotificationManager::class.java.getMethod(
-                    "createNotificationChannel",
-                    channelClass
-                )
-                createChannelMethod.invoke(manager, channel)
+                val channel = android.app.NotificationChannel(CHANNEL_ID, "שירות פנס רקע", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "מאפשר זיהוי ניעור להפעלת הפנס כשהמסך כבוי"
+                }
+                manager.createNotificationChannel(channel)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -819,11 +796,7 @@ class FlashlightService : Service(), SensorEventListener {
     private fun createNotification(): Notification {
         val notificationIntent = Intent(this, MainActivity::class.java)
         
-        val flagImmutable = try {
-            PendingIntent::class.java.getField("FLAG_IMMUTABLE").get(null) as Int
-        } catch (e: Exception) {
-            0
-        }
+        val flagImmutable = 0x04000000 // PendingIntent.FLAG_IMMUTABLE
 
         val pendingIntent = PendingIntent.getActivity(
             this, 0, notificationIntent,
@@ -839,12 +812,7 @@ class FlashlightService : Service(), SensorEventListener {
         )
 
         val builder = if (Build.VERSION.SDK_INT >= 26) {
-            try {
-                Notification.Builder::class.java.getConstructor(Context::class.java, String::class.java)
-                    .newInstance(this, CHANNEL_ID)
-            } catch (e: Exception) {
-                Notification.Builder(this)
-            }
+            Notification.Builder(this, CHANNEL_ID)
         } else {
             Notification.Builder(this)
         }
