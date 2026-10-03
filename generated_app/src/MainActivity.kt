@@ -2,7 +2,6 @@ package com.aiapp.generated
 
 import android.app.Activity
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
@@ -71,11 +70,7 @@ class MainActivity : Activity() {
                 val serviceIntent = Intent(this, FlashlightService::class.java).apply {
                     this.action = FlashlightService.ACTION_TOGGLE
                 }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(serviceIntent)
-                } else {
-                    startService(serviceIntent)
-                }
+                startFlashlightService(serviceIntent)
                 Toast.makeText(this, "פנס הופעל באמצעות כפתור פיזי", Toast.LENGTH_SHORT).show()
                 finish()
                 return
@@ -84,8 +79,8 @@ class MainActivity : Activity() {
 
         // Request permissions
         val permissions = mutableListOf(android.Manifest.permission.CAMERA)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(android.Manifest.permission.POST_NOTIFICATIONS)
+        if (Build.VERSION.SDK_INT >= 33) {
+            permissions.add("android.permission.POST_NOTIFICATIONS")
         }
         val missing = permissions.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
         if (missing.isNotEmpty()) {
@@ -192,7 +187,7 @@ class MainActivity : Activity() {
             setOnCheckedChangeListener { _, isChecked ->
                 prefs.edit().putBoolean("shake_enabled", isChecked).apply()
                 updateServiceSettings()
-            }
+            } 
         }
         shakeCard.addView(shakeSwitch)
 
@@ -331,7 +326,7 @@ class MainActivity : Activity() {
 
         // Footer Credits
         val footerCard = createCard().apply {
-            val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { 
                 topMargin = dpToPx(16)
                 bottomMargin = dpToPx(16)
             }
@@ -430,6 +425,7 @@ class MainActivity : Activity() {
     }
 
     private fun updateSensitivityUI(selectedIndex: Int) {
+        if (!::sensitivityLow.isInitialized || !::sensitivityMed.isInitialized || !::sensitivityHigh.isInitialized) return
         val activeBg = GradientDrawable().apply {
             setColor(0xFFF59E0B.toInt())
             cornerRadius = dpToPx(8).toFloat()
@@ -445,8 +441,7 @@ class MainActivity : Activity() {
                 buttons[i].background = activeBg
                 buttons[i].setTextColor(Color.WHITE)
                 buttons[i].typeface = android.graphics.Typeface.DEFAULT_BOLD
-            }
-            else {
+            } else {
                 buttons[i].background = inactiveBg
                 buttons[i].setTextColor(0xFF64748B.toInt())
                 buttons[i].typeface = android.graphics.Typeface.DEFAULT
@@ -485,8 +480,12 @@ class MainActivity : Activity() {
     }
 
     private fun startFlashlightService(intent: Intent) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
+        if (Build.VERSION.SDK_INT >= 26) {
+            try {
+                Context::class.java.getMethod("startForegroundService", Intent::class.java).invoke(this, intent)
+            } catch (e: Exception) {
+                startService(intent)
+            }
         } else {
             startService(intent)
         }
@@ -509,10 +508,30 @@ class MainActivity : Activity() {
     }
 
     private fun updateUIState(isOn: Boolean) {
+        if (!::mainButton.isInitialized) return
         mainButton.background = createCircularButtonDrawable(isOn)
         mainButtonText.text = if (isOn) "פעיל" else "כבוי"
         mainButtonSub.text = if (isOn) "לחץ לכיבוי" else "לחץ להפעלה"
         sosSwitch.isChecked = FlashlightService.isSosOn
+    }
+
+    private fun safeRegisterReceiver(receiver: BroadcastReceiver, filter: IntentFilter, exported: Boolean) {
+        if (Build.VERSION.SDK_INT >= 33) {
+            try {
+                val flag = if (exported) 1 else 2 // RECEIVER_EXPORTED = 1, RECEIVER_NOT_EXPORTED = 2
+                val method = Context::class.java.getMethod(
+                    "registerReceiver",
+                    BroadcastReceiver::class.java,
+                    IntentFilter::class.java,
+                    java.lang.Integer.TYPE
+                )
+                method.invoke(this, receiver, filter, flag)
+                return
+            } catch (e: Exception) {
+                // Fallback
+            }
+        }
+        registerReceiver(receiver, filter)
     }
 
     private fun registerStatusReceiver() {
@@ -521,14 +540,10 @@ class MainActivity : Activity() {
                 if (intent?.action == FlashlightService.ACTION_STATUS_CHANGED) {
                     val isOn = intent.getBooleanExtra("status", false)
                     updateUIState(isOn)
-                }
+                } 
             } 
         }
-        if (Build.VERSION.SDK_INT >= 33) {
-            registerReceiver(statusReceiver, IntentFilter(FlashlightService.ACTION_STATUS_CHANGED), 2) // 2 is RECEIVER_NOT_EXPORTED
-        } else {
-            registerReceiver(statusReceiver, IntentFilter(FlashlightService.ACTION_STATUS_CHANGED))
-        }
+        safeRegisterReceiver(statusReceiver!!, IntentFilter(FlashlightService.ACTION_STATUS_CHANGED), false)
     }
 
     private fun registerBatteryReceiver() {
@@ -539,14 +554,10 @@ class MainActivity : Activity() {
                 if (level != -1 && scale != -1) {
                     val pct = (level * 100 / scale.toFloat()).toInt()
                     batteryText.text = "סוללה: $pct%"
-                }
-            }
+                } 
+            } 
         }
-        if (Build.VERSION.SDK_INT >= 33) {
-            registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED), 1) // 1 is RECEIVER_EXPORTED
-        } else {
-            registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        }
+        registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
     }
 
     private fun openScreenLightDialog() {
@@ -627,11 +638,7 @@ class FlashlightService : Service(), SensorEventListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(1, createNotification(), android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)
-        } else {
-            startForeground(1, createNotification())
-        }
+        safeStartForeground(1, createNotification())
 
         when (intent?.action) {
             ACTION_TOGGLE -> {
@@ -652,6 +659,24 @@ class FlashlightService : Service(), SensorEventListener {
             }
         }
         return START_STICKY
+    }
+
+    private fun safeStartForeground(id: Int, notification: Notification) {
+        if (Build.VERSION.SDK_INT >= 29) {
+            try {
+                val method = Service::class.java.getMethod(
+                    "startForeground",
+                    java.lang.Integer.TYPE,
+                    Notification::class.java,
+                    java.lang.Integer.TYPE
+                )
+                method.invoke(this, id, notification, 64) // 64 is FOREGROUND_SERVICE_TYPE_CAMERA
+                return
+            } catch (e: Exception) {
+                // Fallback
+            }
+        }
+        startForeground(id, notification)
     }
 
     private fun toggleTorch() {
@@ -695,8 +720,9 @@ class FlashlightService : Service(), SensorEventListener {
 
     private fun registerShakeListener() {
         sensorManager.unregisterListener(this)
-        if (prefs.getBoolean("shake_enabled", true)) {
-            sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI)
+        val acc = accelerometer
+        if (acc != null && prefs.getBoolean("shake_enabled", true)) {
+            sensorManager.registerListener(this, acc, SensorManager.SENSOR_DELAY_UI)
         }
     }
 
@@ -733,11 +759,26 @@ class FlashlightService : Service(), SensorEventListener {
 
     private fun triggerVibration() {
         val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(android.os.VibrationEffect.createOneShot(150, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
-        } else {
-            vibrator.vibrate(150)
+        if (Build.VERSION.SDK_INT >= 26) {
+            try {
+                val effectClass = Class.forName("android.os.VibrationEffect")
+                val createOneShotMethod = effectClass.getMethod(
+                    "createOneShot",
+                    java.lang.Long.TYPE,
+                    java.lang.Integer.TYPE
+                )
+                val effect = createOneShotMethod.invoke(null, 150L, -1) // -1 is DEFAULT_AMPLITUDE
+                val vibrateMethod = Vibrator::class.java.getMethod(
+                    "vibrate",
+                    effectClass
+                )
+                vibrateMethod.invoke(vibrator, effect)
+                return
+            } catch (e: Exception) {
+                // Fallback
+            }
         }
+        vibrator.vibrate(150)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
@@ -750,24 +791,43 @@ class FlashlightService : Service(), SensorEventListener {
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "שירות פנס רקע",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "מאפשר זיהוי ניעור להפעלת הפנס כשהמסך כבוי"
+        if (Build.VERSION.SDK_INT >= 26) {
+            try {
+                val channelClass = Class.forName("android.app.NotificationChannel")
+                val constructor = channelClass.getConstructor(
+                    String::class.java,
+                    CharSequence::class.java,
+                    java.lang.Integer.TYPE
+                )
+                val channel = constructor.newInstance(CHANNEL_ID, "שירות פנס רקע", 2) // 2 is IMPORTANCE_LOW
+                
+                val setDescriptionMethod = channelClass.getMethod("setDescription", String::class.java)
+                setDescriptionMethod.invoke(channel, "מאפשר זיהוי ניעור להפעלת הפנס כשהמסך כבוי")
+                
+                val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                val createChannelMethod = NotificationManager::class.java.getMethod(
+                    "createNotificationChannel",
+                    channelClass
+                )
+                createChannelMethod.invoke(manager, channel)
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
         }
     }
 
     private fun createNotification(): Notification {
         val notificationIntent = Intent(this, MainActivity::class.java)
+        
+        val flagImmutable = try {
+            PendingIntent::class.java.getField("FLAG_IMMUTABLE").get(null) as Int
+        } catch (e: Exception) {
+            0
+        }
+
         val pendingIntent = PendingIntent.getActivity(
             this, 0, notificationIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            flagImmutable or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
         val toggleIntent = Intent(this, FlashlightService::class.java).apply {
@@ -775,11 +835,16 @@ class FlashlightService : Service(), SensorEventListener {
         }
         val togglePendingIntent = PendingIntent.getService(
             this, 1, toggleIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            flagImmutable or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, CHANNEL_ID)
+        val builder = if (Build.VERSION.SDK_INT >= 26) {
+            try {
+                Notification.Builder::class.java.getConstructor(Context::class.java, String::class.java)
+                    .newInstance(this, CHANNEL_ID)
+            } catch (e: Exception) {
+                Notification.Builder(this)
+            }
         } else {
             Notification.Builder(this)
         }

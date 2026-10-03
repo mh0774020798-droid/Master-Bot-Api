@@ -30,7 +30,7 @@
         </activity>
 
         <service 
-            android:name=".FlashlightService" 
+            android:name=".FlashlightService"
             android:exported="false"
             android:foregroundServiceType="camera" />
     </application>
