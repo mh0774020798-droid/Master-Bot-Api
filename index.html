@@ -31,6 +31,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="gemini-personal.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
   :root {
@@ -808,6 +809,7 @@
     <h1><span class="grad-text">מאסטר בוט</span></h1>
     <p class="sub" data-text-key="auth_sub">מתארים אפליקציית אנדרואיד במילים — ומקבלים APK מוכן להתקנה. אפשר גם לערוך, לתרגם ולצנזר אפליקציות קיימות.</p>
     <div id="googleSignInButton"></div>
+    <button type="button" id="authConnectionsBtn" class="btn secondary">הגדרת מפתח Gemini ובדיקת מודלים</button>
     <p class="hint-text" id="authRedirectHint" hidden style="margin-top:10px;"></p>
     <p class="auth-error" id="authError" hidden></p>
   </div>
@@ -995,7 +997,20 @@
       <div class="pro-note hidden" id="guestLockedNote"></div>
 
       <p class="hint-text" id="creditCostsHint"></p>
-      <p class="hint-text">כל החיבורים מנוהלים בצד השרת — אין צורך להגדיר כלום כאן.</p>
+      <div class="field">
+        <label class="field-label" for="personalGeminiKey">מפתח Gemini אישי — לכל המשתמשים</label>
+        <input id="personalGeminiKey" class="text-input" type="password" dir="ltr" autocomplete="off" spellcheck="false" placeholder="AQ… או AIza…">
+        <p class="hint-text">המפתח נשמר בזיכרון הלשונית בלבד ונשלח ישירות לגוגל. רענון או התנתקות מוחקים אותו. במפתח אישי נעשה שימוש ברמת החשיבה ברירת המחדל של המודל. הוא אינו מחליף חיבור GitHub או הרשאות ניהול.</p>
+        <button id="personalDiscover" type="button" class="btn primary">בדיקת מפתח וטעינת מודלים</button>
+        <button id="personalClear" type="button" class="btn secondary">מחיקת המפתח</button>
+        <p id="personalStatus" class="status-line" role="status" aria-live="polite"></p>
+      </div>
+      <div class="field"><label for="personalGeneral" class="field-label">מודל לקוד, צ׳אט וניתוח</label><select id="personalGeneral" class="text-input" disabled></select>
+        <button id="personalTestGeneral" type="button" class="btn secondary" disabled>בדיקת תשובה מהמודל</button><p id="personalGeneralStatus" role="status"></p></div>
+      <div class="field"><label for="personalTranslation" class="field-label">מודל לתרגום טקסט</label><select id="personalTranslation" class="text-input" disabled></select>
+        <button id="personalTestTranslation" type="button" class="btn secondary" disabled>בדיקת תרגום</button><p id="personalTranslationStatus" role="status"></p></div>
+      <p class="hint-text">הרשימה מציגה את המודלים שגוגל מחזירה למפתח; הופעה ברשימה אינה מבטיחה מכסה או זמינות. בדיקת תשובה שולחת בקשה קטנה שעשויה לצרוך מכסה. הסיווג לפי שם ושיטות API הוא הערכה, לא התחייבות לאיכות. התאמה לתמונות לא נבדקת בבדיקת הטקסט.</p>
+      <details><summary>כל המודלים וההתאמה למשימות</summary><div id="personalModelList" style="max-height:260px;overflow:auto"></div></details>
     </div>
     <div class="modal-foot">
       <button type="button" class="btn secondary" id="connectionsDoneBtn">סגירה</button>
@@ -1120,7 +1135,7 @@
           <p class="hint-text">מפתחות Gemini המשמשים אוטומטית את כל משתמשי הפרו/סופר-פרו/מנהל דרך השרת. אף פעם לא נחשפים למשתמשים רגילים.</p>
           <div id="adminApiKeysListEl"></div>
           <div class="add-row">
-            <input type="text" class="text-input" id="adminNewApiKeyInput" placeholder="AIza…">
+            <input type="text" class="text-input" id="adminNewApiKeyInput" placeholder="AQ… או AIza…">
             <button type="button" class="btn secondary" id="adminAddApiKeyBtn">הוספה</button>
           </div>
           <button type="button" class="btn primary" id="adminSaveApiKeysBtn" style="margin-top:14px;">שמירת מפתחות</button>
@@ -1198,7 +1213,7 @@
   // its own build tag against a freshly-fetched (cache-bypassed) copy of itself
   // and reloads ONCE per session when they differ. When they match, the guard
   // is cleared so a future update triggers again.
-  const APP_BUILD = "2026-09-18.2350";
+  const APP_BUILD = "2026-10-04.personal-gemini";
   (function checkForStalePage() {
     try {
       if (sessionStorage.getItem("appBuildReloadedFor") === APP_BUILD) return;
@@ -1467,8 +1482,6 @@ rebuild, even if that means dropping part of the requested change.`;
 
   const GOOGLE_CLIENT_ID = "733141570620-4elai2igmu1a22ftiqm7pfltvm7vhuhg.apps.googleusercontent.com";
   // The origin whitelisted in that Google client's Authorized JavaScript origins.
-  const OFFICIAL_ORIGIN = "https://shlomoraviv.github.io";
-  const OFFICIAL_PATH = "/";
   const ROLE_LABELS = { regular: "רגיל", pro: "פרו", superpro: "סופר-פרו", admin: "מנהל" };
   const MODE_LABELS_HE = { build: "בנייה", edit: "עריכה", translate: "תרגום", censor: "צנזור", chat: "שיחה" };
 
@@ -2067,6 +2080,60 @@ rebuild, even if that means dropping part of the requested change.`;
   // key when all workers share the same per-minute quota.
   const GEMINI_KEY_BACKOFF_DEFAULT_MS = 15000;
   const GEMINI_KEY_BACKOFF_MAX_MS = 60000;
+  const personalGemini = PersonalGemini.create(window.fetch.bind(window));
+  const personalKeyInput = $("personalGeminiKey");
+  let personalUiRevision = 0;
+  function clearPersonalGemini() {
+    personalUiRevision++;
+    personalGemini.clear(); personalKeyInput.value = "";
+    $("personalModelList").replaceChildren();
+    for (const suffix of ["General", "Translation"]) {
+      $("personal" + suffix).replaceChildren(); $("personal" + suffix).disabled = true;
+      $("personalTest" + suffix).disabled = true; $("personal" + suffix + "Status").textContent = "";
+    }
+    $("personalStatus").textContent = "אין מפתח אישי פעיל.";
+    $("personalDiscover").disabled = false;
+  }
+  personalKeyInput.addEventListener("input", () => { const value = personalKeyInput.value; clearPersonalGemini(); personalKeyInput.value = value; });
+  $("personalClear").addEventListener("click", clearPersonalGemini);
+  $("personalDiscover").addEventListener("click", async () => {
+    const value = personalKeyInput.value; clearPersonalGemini(); personalKeyInput.value = value;
+    const revision = personalUiRevision;
+    $("personalDiscover").disabled = true;
+    $("personalStatus").textContent = "בודק מפתח וטוען את כל עמודי הרשימה…";
+    try {
+      personalGemini.setKey(value);
+      const models = await personalGemini.discover();
+      if (revision !== personalUiRevision) return;
+      for (const model of models) {
+        const info = PersonalGemini.classify(model);
+        const line = document.createElement("p"); line.textContent = info.id + " — " + info.label;
+        $("personalModelList").appendChild(line);
+        if (info.eligible) for (const suffix of ["General", "Translation"]) {
+          const option = document.createElement("option"); option.value = info.id; option.textContent = model.displayName ? model.displayName + " — " + info.id : info.id;
+          $("personal" + suffix).appendChild(option);
+        }
+      }
+      const eligible = models.some(m => PersonalGemini.classify(m).eligible);
+      for (const suffix of ["General", "Translation"]) { $("personal" + suffix).disabled = !eligible; $("personalTest" + suffix).disabled = !eligible; }
+      $("personalStatus").textContent = "המפתח התקבל לרשימת המודלים: " + models.length + " מודלים. " + (eligible ? "בחרו מודל ובצעו בדיקת תשובה." : "לא נמצאו מודלי טקסט תואמים לאתר.");
+    } catch (error) { if (revision === personalUiRevision) { personalGemini.clear(); $("personalStatus").textContent = error.message; } }
+    finally { if (revision === personalUiRevision) $("personalDiscover").disabled = false; }
+  });
+  for (const [suffix, task] of [["General", "general"], ["Translation", "translation"]]) {
+    $("personal" + suffix).addEventListener("change", () => {
+      personalGemini.choose(task, $("personal" + suffix).value);
+      $("personal" + suffix + "Status").textContent = "המודל נבחר; טרם נבדק.";
+    });
+    $("personalTest" + suffix).addEventListener("click", async () => {
+      const revision = personalUiRevision, id = $("personal" + suffix).value;
+      const button = $("personalTest" + suffix), status = $("personal" + suffix + "Status");
+      button.disabled = true; status.textContent = "שולח בקשת בדיקה לגוגל…";
+      try { await personalGemini.test(task); if (revision === personalUiRevision && id === $("personal" + suffix).value) status.textContent = "הבדיקה הצליחה: התקבלה תשובת טקסט במבנה הנדרש. אין בכך הבטחה לזמינות עתידית או לאיכות התרגום."; }
+      catch (error) { if (revision === personalUiRevision && id === $("personal" + suffix).value) status.textContent = error.message; }
+      finally { if (revision === personalUiRevision) button.disabled = false; }
+    });
+  }
   function parseGeminiKeys(raw) {
     return String(raw || "").split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
   }
@@ -2145,82 +2212,8 @@ rebuild, even if that means dropping part of the requested change.`;
     }
   }
   async function callGeminiWithKeys(geminiKeys, startOffset, body, logTarget) {
-    // Proxy-only: the Gemini keys exist only server-side. Any direct-key code
-    // path has been removed; callers may still pass arrays, they are ignored.
+    if (personalGemini.hasKey()) return personalGemini.generate(body);
     return callGeminiViaProxyWithFallback(body, logTarget);
-    const geminiBase = "https://generativelanguage.googleapis.com";
-
-    let lastErr;
-    for (let i = 0; i < geminiKeys.length; i++) {
-      const keyIdx = (startOffset + i) % geminiKeys.length;
-      const key = geminiKeys[keyIdx];
-      const keyLabel = `מפתח #${keyIdx + 1}`;
-
-      let res;
-      try {
-        res = await fetch(
-          // המפתח עובר כפרמטר query (?key=), לא ככותרת x-goog-api-key — בדיוק כמו שכבר נעשה
-          // למטה עבור GitHub: כותרת מותאמת-אישית כזו הופכת את הבקשה ל-"non-simple" ומחייבת
-          // preflight מסוג OPTIONS, וה-preflight הזה נחסם/נכשל אצל חלק מסינוני התוכן ברמת הרשת
-          // (כמו אתרוג ונטפרי) — שם הבעיה שגרמה לפעולות ה-AI, בניגוד לפעולות ה-GitHub, לא לעבוד
-          // בסביבות האלה. פרמטר ה-query הוא דרך האימות הרשמית והנתמכת של Gemini API למפתחות API,
-          // ולא דורש preflight. עם זאת, בחלק מהרשתות עם סינון תוכן החסימה היא ברמת הדומיין עצמו
-          // (generativelanguage.googleapis.com) ולא קשורה לכותרות בכלל — geminiBase מאפשר לנתב
-          // דרך פרוקסי (Cloudflare Worker) על דומיין אחר שלא חסום, במקום ישירות לגוגל.
-          `${geminiBase}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          }
-        );
-      } catch (networkErr) {
-        lastErr = networkErr;
-        if (geminiKeys.length > 1) log(`${keyLabel}: שגיאת רשת, עובר למפתח הבא…`, null, logTarget);
-        continue;
-      }
-
-      if (res.status === 429 || res.status === 401 || res.status === 403 || res.status >= 500) {
-        const text = await res.text().catch(() => "");
-        lastErr = new Error(`Gemini API ${res.status} (${keyLabel}) — ${text.slice(0, 200)}`);
-        // On 429 specifically, waiting briefly on the SAME key before rotating
-        // usually succeeds and saves the other keys' quotas — parallel workers
-        // tend to trip the shared per-minute limit together.
-        if (res.status === 429) {
-          const retryAfterSec = parseInt(res.headers.get("retry-after") || "", 10);
-          const waitMs = Number.isFinite(retryAfterSec) && retryAfterSec > 0
-            ? Math.min(retryAfterSec * 1000, GEMINI_KEY_BACKOFF_MAX_MS)
-            : GEMINI_KEY_BACKOFF_DEFAULT_MS;
-          log(`${keyLabel}: מוגבל לשימוש (429), ממתין ${Math.round(waitMs / 1000)} שניות לפני המפתח הבא…`, null, logTarget);
-          await sleep(waitMs);
-        }
-        if (geminiKeys.length > 1) log(`${keyLabel} חזר עם ${res.status}, עובר למפתח הבא…`, null, logTarget);
-        continue;
-      }
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(`Gemini API error ${res.status} — ${text.slice(0, 300)}`);
-      }
-      try {
-        return await res.json();
-      } catch (parseErr) {
-        // A 2xx response that isn't valid JSON almost never comes from Gemini itself (its errors
-        // are JSON too) — it's the fingerprint of something between the browser and Google
-        // returning its own content instead, most commonly a network-level content filter (like
-        // Etrog/Netfree) substituting a block page, or killing an over-long request and serving
-        // its own Hebrew "timeout exceeded" page. Treat it like a per-key failure and rotate on
-        // to the next key (a fresh request often lands under the filter's cutoff) instead of
-        // failing the whole batch on the first hit.
-        lastErr = new Error(
-          "התקבלה תשובה שאינה JSON מ-" + geminiBase.replace(/^https?:\/\//, "") + " — כנראה שהרשת חוסמת/מקצרת את הפנייה " +
-          "(לדוגמה סינון תוכן כמו אתרוג/נטפרי שמחזיר עמוד \"תם הזמן הקצוב\" לבקשות ארוכות). " +
-          "נסו להגדיר כתובת פרוקסי בשדה \"כתובת פרוקסי ל-Gemini\" בחיבורים (יש הוראות והקובץ הנדרש מצורפים)."
-        );
-        if (geminiKeys.length > 1) log(`${keyLabel}: תשובה שאינה JSON (חסימת רשת?), עובר למפתח הבא…`, null, logTarget);
-        continue;
-      }
-    }
-    throw lastErr || new Error("כל מפתחות ה-Gemini נכשלו.");
   }
 
   // Round-robins the starting key across successive calls, and — within a single
@@ -2228,6 +2221,7 @@ rebuild, even if that means dropping part of the requested change.`;
   // (429), unauthorized (401/403) or erroring server-side (5xx). This is what
   // lets several free AI Studio keys act like one bigger shared quota.
   async function callGemini(geminiKeys, body, logTarget) {
+    if (personalGemini.hasKey()) return personalGemini.generate(body);
     if (currentUser && PRO_PLUS_ROLES.includes(currentUser.role)) {
       try {
         const result = await backendCall("geminiGenerate", { body, model: GEMINI_MODEL });
@@ -2251,6 +2245,7 @@ rebuild, even if that means dropping part of the requested change.`;
   // each of its parallel workers its own fixed offset here, so N batches can run
   // at once across N keys without them all fighting over the same counter.
   async function callGeminiPinned(geminiKeys, startOffset, body, logTarget) {
+    if (personalGemini.hasKey()) return personalGemini.generate(body, "translation");
     if (currentUser && PRO_PLUS_ROLES.includes(currentUser.role)) {
       try {
         const result = await backendCall("geminiGenerate", { body, model: GEMINI_MODEL });
@@ -3942,7 +3937,7 @@ rebuild, even if that means dropping part of the requested change.`;
     // Repo coordinates from the server-side public info; credentials are not
     // part of the browser state at all.
     return {
-      geminiKeys: [],
+      geminiKeys: personalGemini.hasKey() ? ["personal-in-memory"] : [],
       token: "",
       owner: publicInfo.githubOwner || DEFAULT_GITHUB_OWNER,
       repo: publicInfo.githubRepo || DEFAULT_GITHUB_REPO,
@@ -6346,7 +6341,7 @@ image clearly and unambiguously depicts it.`;
     appShell.hidden = true;
     adminScreen.style.display = "none";
     authScreen.classList.remove("hidden");
-    maybeRedirectToOfficialOrigin();
+    // Keep users on this deployment; OAuth origins must be configured in Google Cloud.
     // A guest who was bounced here by requireOwner gets the reason on screen.
     try {
       const hint = localStorage.getItem("aiAppMaker.postAuthHint");
@@ -6358,20 +6353,6 @@ image clearly and unambiguously depicts it.`;
     } catch (err) {}
   }
 
-  function maybeRedirectToOfficialOrigin() {
-    try {
-      if (location.protocol !== "https:") return;
-      const h = location.hostname;
-      if (h === "shlomoraviv.github.io" || h === "localhost" || h === "127.0.0.1") return;
-      // Google accepts sign-in only from origins whitelisted in the OAuth
-      // client — that origin is the official address of the site, so every
-      // visitor is sent there for sign-in (it is live and served).
-      if (sessionStorage.getItem("mb_official_redirect") === "1") return; // one attempt only — no loops
-      sessionStorage.setItem("mb_official_redirect", "1");
-      if (authRedirectHint) { authRedirectHint.textContent = "מעביר לכתובת הרשמית של האתר…"; authRedirectHint.hidden = false; }
-      setTimeout(() => { try { location.replace(OFFICIAL_ORIGIN + OFFICIAL_PATH); } catch (e) {} }, 900);
-    } catch (e) {}
-  }
   async function handleGoogleCredential(response) {
     authErrorEl.hidden = true;
     try {
@@ -6402,6 +6383,7 @@ image clearly and unambiguously depicts it.`;
     google.accounts.id.renderButton(googleSignInButtonEl, { theme: "outline", size: "large", shape: "pill", text: "signin_with", locale: "he", width: 280 });
   }
   async function handleLogout() {
+    clearPersonalGemini();
     if (currentUser) await backendCall("logout", {}).catch(() => {});
     currentUser = null;
     activeConversationId = null;
@@ -6409,9 +6391,7 @@ image clearly and unambiguously depicts it.`;
     currentApk = null;
     conversationsCache = [];
     conversationIsLive = false;
-    // Owner credentials deliberately SURVIVE logout: they belong to this
-    // device, and re-pasting them after every logout would be torture. Use
-    // "ניקוי" in the חיבורים modal to remove them from this browser.
+    // Personal Gemini credentials were cleared before signing out.
     closeSidebarMobile();
     showAuthScreenView();
   }
@@ -6529,6 +6509,7 @@ image clearly and unambiguously depicts it.`;
     overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.classList.add("hidden"); });
   }
 
+  $("authConnectionsBtn").addEventListener("click", () => connectionsModal.classList.remove("hidden"));
   sideConnectionsBtn.addEventListener("click", () => { connectionsModal.classList.remove("hidden"); closeSidebarMobile(); });
   wireOverlayClose(connectionsModal, connectionsCloseBtn);
 
@@ -6589,6 +6570,7 @@ image clearly and unambiguously depicts it.`;
     return !!(currentUser && currentUser.role === "admin");
   }
   function openAdminScreen() {
+    if (!isAdminUnlocked()) return;
     appShell.hidden = true;
     adminScreen.style.display = "flex";
     switchAdminPanel("users");
@@ -6842,3 +6824,4 @@ image clearly and unambiguously depicts it.`;
 </script>
 </body>
 </html>
+
