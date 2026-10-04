@@ -30,7 +30,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+
 <script src="gemini-personal.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
@@ -1213,7 +1213,7 @@
   // its own build tag against a freshly-fetched (cache-bypassed) copy of itself
   // and reloads ONCE per session when they differ. When they match, the guard
   // is cleared so a future update triggers again.
-  const APP_BUILD = "2026-10-04.personal-gemini";
+  const APP_BUILD = "2026-10-04.no-login";
   (function checkForStalePage() {
     try {
       if (sessionStorage.getItem("appBuildReloadedFor") === APP_BUILD) return;
@@ -1480,7 +1480,7 @@ to make it rebuild, keeping as much of the intended change as possible. If the l
 is not safely fixable, return the files with content reverted to something you're confident will
 rebuild, even if that means dropping part of the requested change.`;
 
-  const GOOGLE_CLIENT_ID = "733141570620-4elai2igmu1a22ftiqm7pfltvm7vhuhg.apps.googleusercontent.com";
+
   // The origin whitelisted in that Google client's Authorized JavaScript origins.
   const ROLE_LABELS = { regular: "רגיל", pro: "פרו", superpro: "סופר-פרו", admin: "מנהל" };
   const MODE_LABELS_HE = { build: "בנייה", edit: "עריכה", translate: "תרגום", censor: "צנזור", chat: "שיחה" };
@@ -1784,7 +1784,7 @@ rebuild, even if that means dropping part of the requested change.`;
 
   // Actions that must always reach the network even when signed out (they ARE
   // the sign-in / public bootstrap). Everything else degrades locally.
-  const ALWAYS_ONLINE_BACKEND_ACTIONS = new Set(["googleLogin", "getPublicInfo"]);
+  const ALWAYS_ONLINE_BACKEND_ACTIONS = new Set(); // Standalone guest mode: no account bootstrap.
 
   // POST helper with a hard deadline. text/plain keeps Apps Script's CORS
   // preflight away (see note above); the AbortController only exists to
@@ -6324,64 +6324,28 @@ image clearly and unambiguously depicts it.`;
     authScreen.classList.add("hidden");
     appShell.hidden = false;
     loadConnectionsFromStorage();
-    connectionsSummary.textContent = "GitHub + Gemini מוכנים";
+    connectionsSummary.textContent = "הגדרת מפתח Gemini ומודלים";
+    applyRoleUI();
     if (currentUser) {
       renderUserBadge();
       applyRoleUI();
       loadConversationsList();
       sideGuestHint.classList.add("hidden");
     } else {
-      sideUserSub.textContent = "מוכן לעבודה · ללא הגבלה";
-      sideGuestHint.classList.add("hidden");
+      sideUserName.textContent = "מצב אישי";
+      sideAvatarInitial.textContent = "א";
+      sideUserSub.textContent = "ללא התחברות · מפתח Gemini אישי";
+      sideGuestHint.textContent = "להתחלה פתחו חיבורים והזינו מפתח Gemini. השיחות אינן נשמרות בחשבון. בניית APK דורשת שירות GitHub מחובר.";
+      sideGuestHint.classList.remove("hidden");
+      sideLogoutBtn.classList.remove("hidden");
+      sideLogoutBtn.title = "ניקוי המפתח והתחלת עבודה מחדש";
+      sideLogoutBtn.setAttribute("aria-label", sideLogoutBtn.title);
     }
     startNewConversationPicker(null); // real chat, ready to type, right from login
   }
 
-  function showAuthScreenView() {
-    appShell.hidden = true;
-    adminScreen.style.display = "none";
-    authScreen.classList.remove("hidden");
-    // Keep users on this deployment; OAuth origins must be configured in Google Cloud.
-    // A guest who was bounced here by requireOwner gets the reason on screen.
-    try {
-      const hint = localStorage.getItem("aiAppMaker.postAuthHint");
-      if (hint) {
-        authErrorEl.textContent = hint;
-        authErrorEl.hidden = false;
-        localStorage.removeItem("aiAppMaker.postAuthHint");
-      }
-    } catch (err) {}
-  }
+  function showAuthScreenView() { showApp(); }
 
-  async function handleGoogleCredential(response) {
-    authErrorEl.hidden = true;
-    try {
-      const result = await backendCall("googleLogin", { idToken: response.credential });
-      if (!result.ok) throw new Error(result.error);
-      // Full server session restored: Google-signed users get credits,
-      // roles and admin rights exactly as before, managed by the backend.
-      currentUser = { token: result.token, username: result.username, displayName: result.displayName, role: result.role, credits: result.credits };
-      showApp();
-    } catch (err) {
-      authErrorEl.textContent = err.message;
-      // Google's backend hiccups come and go within minutes (proven repeatedly
-      // today). The account itself is fine — tell the person to just try again
-      // instead of leaving them stuck on the sign-in screen with a dead end.
-      if (err && err.message && !err.message.includes("חיבור")) {
-        authErrorEl.textContent = err.message + " — אפשר פשוט ללחוץ שוב על כפתור הכניסה ולנסות שוב.";
-      }
-      authErrorEl.hidden = false;
-    }
-  }
-
-  // Google Identity Services: polls for the GSI script (kept in <head>) and
-  // renders the official sign-in button. This is the ONLY way into the app —
-  // signed-in users get a full server session (credits/roles/admin).
-  function initGoogleSignIn() {
-    if (!window.google || !window.google.accounts) { setTimeout(initGoogleSignIn, 300); return; }
-    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleGoogleCredential });
-    google.accounts.id.renderButton(googleSignInButtonEl, { theme: "outline", size: "large", shape: "pill", text: "signin_with", locale: "he", width: 280 });
-  }
   async function handleLogout() {
     clearPersonalGemini();
     if (currentUser) await backendCall("logout", {}).catch(() => {});
@@ -6397,7 +6361,7 @@ image clearly and unambiguously depicts it.`;
   }
   // The power button: full logout for a signed-in user, or simply back to the
   // login screen for a guest/owner-local session.
-  sideLogoutBtn.addEventListener("click", () => { if (currentUser) handleLogout(); else showAuthScreenView(); });
+  sideLogoutBtn.addEventListener("click", handleLogout);
 
   // ---- connections persistence (localStorage) ----
   // Repo coordinates and the Gemini proxy URL are remembered per browser.
@@ -6814,8 +6778,7 @@ image clearly and unambiguously depicts it.`;
   // INIT
   // ==========================================================================
   applyIcons();
-  initGoogleSignIn();
-  loadPublicInfo();
+  showApp();
   // Preload the saved (or built-in default) connections before the login
   // screen even renders, so continuing without signing in already has the
   // token, repo and Gemini keys ready to go.
